@@ -48,8 +48,7 @@
   document.getElementById("goRemote").onclick = () => {
     const pin = getPin();
     if(!pin) return alert("Isi PIN dulu");
-    location.href = "remote.html?pin=" + encodeURIComponent(pin);
-  };
+    location.href = "./remote.html?pin=" + encodeURIComponent(pin);
 
   // auto isi pin dari link
   getPin();
@@ -57,3 +56,4 @@
 </body>
 
 </html>
+
