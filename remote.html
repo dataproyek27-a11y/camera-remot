@@ -48,6 +48,13 @@
       <button id="ton" class="secondary">🔦 TORCH ON</button>
       <button id="toff" class="secondary">🔦 TORCH OFF</button>
     </div>
+    <div class="card" style="margin-top:12px">
+  <b>Rekaman Terakhir</b>
+  <a id="lastVideoLink" href="#" target="_blank" style="display:none;">
+    ▶️ Buka Rekaman Online
+  </a>
+  <div id="lastVideoText" style="margin-top:8px;opacity:.9">Belum ada rekaman</div>
+    </div>
   </div>
 </div>
 
@@ -67,6 +74,8 @@
   const db = firebase.database();
 
   let roomRef = null;
+  const lastVideoLink = document.getElementById("lastVideoLink");
+const lastVideoText = document.getElementById("lastVideoText");
   const statusEl = document.getElementById("status");
 
   function setStatus(html){ statusEl.innerHTML = html; }
@@ -82,6 +91,17 @@
     if(!pin) return alert("Isi PIN dulu!");
 
     roomRef = db.ref("rooms/" + pin);
+    roomRef.child("last_video_url").on("value", (s) => {
+  const url = s.val();
+  if (url) {
+    lastVideoLink.href = url;
+    lastVideoLink.style.display = "inline-block";
+    lastVideoText.textContent = "✅ Rekaman sudah ada";
+  } else {
+    lastVideoLink.style.display = "none";
+    lastVideoText.textContent = "Belum ada rekaman";
+  }
+});
 
     setStatus(`✅ Remote connect room: <span class="ok"><b>${pin}</b></span>`);
 
@@ -100,4 +120,5 @@
   document.getElementById("toff").onclick = ()=>send("TORCH_OFF");
 </script>
 </body>
+
 </html>
