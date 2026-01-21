@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Remote Kamera (Realtime)</title>
+
+  <!-- Firebase Compat -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+  <style>
+    body{margin:0;font-family:Arial;background:#0b1220;color:#fff}
+    header{padding:14px 16px;background:#111b33;font-weight:700}
+    .wrap{padding:14px;max-width:520px;margin:auto}
+    .card{background:#111b33;border-radius:14px;padding:12px;margin-top:12px}
+    input{padding:12px 14px;border:0;border-radius:12px;width:100%}
+    .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+    button{padding:12px 14px;border:0;border-radius:12px;width:100%;background:#2a5bff;color:#fff;font-weight:700;cursor:pointer}
+    button.secondary{background:#2b3248}
+    button.danger{background:#ff3b3b}
+    .ok{color:#7CFF9C}
+    a{color:#9bd6ff}
+    .small{opacity:.85;font-size:13px;line-height:1.4}
+  </style>
+</head>
+
+<body>
+<header>🎮 REMOTE KAMERA (Realtime)</header>
+
+<div class="wrap">
+  <div class="card">
+    <b>PIN Room</b>
+    <input id="pin" placeholder="contoh: 1234" value="1234"/>
+    <button id="btnConnect" style="margin-top:10px">🔗 CONNECT</button>
+    <div id="status" class="small" style="margin-top:8px;opacity:.9">Belum connect</div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <button id="shot">📸 FOTO</button>
+      <button id="sw" class="secondary">🔁 SWITCH</button>
+    </div>
+    <div class="row">
+      <button id="rec" class="danger">⏺️ REKAM</button>
+      <button id="stop" class="secondary">⏹️ STOP</button>
+    </div>
+    <div class="row">
+      <button id="ton" class="secondary">🔦 TORCH ON</button>
+      <button id="toff" class="secondary">🔦 TORCH OFF</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <b>Rekaman Terakhir</b><br/>
+    <a id="lastVideoLink" href="#" target="_blank" style="display:none">▶️ Buka Rekaman Online</a>
+    <div id="lastVideoText" class="small" style="margin-top:8px;opacity:.9">Belum ada rekaman</div>
+  </div>
+</div>
+
+<script>
+/* =========================
+   ✅ FIREBASE CONFIG (PUNYA KAMU)
+========================= */
+const firebaseConfig = {
+  apiKey: "AIzaSyBfNxj8Jxz8hVMgQm2HYOYSYyw-a0750Aw",
+  authDomain: "camera-3547b.firebaseapp.com",
+  databaseURL: "https://camera-3547b-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "camera-3547b",
+  storageBucket: "camera-3547b.appspot.com",
+  messagingSenderId: "436520969909",
+  appId: "1:436520969909:web:f4ab1cef0b53bbed7940fc"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+let roomRef = null;
+
+const statusEl = document.getElementById("status");
+const lastVideoLink = document.getElementById("lastVideoLink");
+const lastVideoText = document.getElementById("lastVideoText");
+
+function setStatus(html){
+  statusEl.innerHTML = html;
+}
+
+function getPinFromUrl(){
+  const p = new URLSearchParams(location.search).get("pin");
+  if(p) document.getElementById("pin").value = p;
+}
+
+function send(cmd){
+  if(!roomRef) return alert("Connect dulu!");
+  roomRef.child("cmd").set(cmd);
+  roomRef.child("last_remote").set(Date.now());
+}
+
+document.getElementById("btnConnect").onclick = () => {
+  const pin = document.getElementById("pin").value.trim();
+  if(!pin) return alert("Isi PIN dulu!");
+
+  roomRef = db.ref("rooms/" + pin);
+
+  setStatus(`✅ Remote connect room: <span class="ok"><b>${pin}</b></span>`);
+
+  // status kamera online
+  roomRef.child("camera_online").on("value", (s)=>{
+    const online = s.val();
+    if(online){
+      setStatus(`✅ Kamera ONLINE: <span class="ok"><b>${pin}</b></span>`);
+    }else{
+      setStatus(`⚠️ Kamera OFFLINE / belum JOIN: <b>${pin}</b>`);
+    }
+  });
+
+  // tampilkan rekaman terakhir (link online)
+  roomRef.child("last_video_url").on("value", (s)=>{
+    const url = s.val();
+    if(url){
+      lastVideoLink.href = url;
+      lastVideoLink.style.display = "inline-block";
+      lastVideoText.textContent = "✅ Rekaman sudah ada";
+    }else{
+      lastVideoLink.style.display = "none";
+      lastVideoText.textContent = "Belum ada rekaman";
+    }
+  });
+};
+
+document.getElementById("shot").onclick = ()=>send("SHOT");
+document.getElementById("sw").onclick   = ()=>send("SWITCH");
+document.getElementById("rec").onclick  = ()=>send("REC_START");
+document.getElementById("stop").onclick = ()=>send("REC_STOP");
+document.getElementById("ton").onclick  = ()=>send("TORCH_ON");
+document.getElementById("toff").onclick = ()=>send("TORCH_OFF");
+
+/* =========================
+   ✅ AUTO CONNECT DARI LINK
+========================= */
+getPinFromUrl();
+window.addEventListener("load", () => {
+  setTimeout(() => {
+    document.getElementById("btnConnect").click();
+  }, 500);
+});
+</script>
+</body>
+</html>

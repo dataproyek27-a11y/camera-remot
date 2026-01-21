@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Camera Remote - Menu</title>
+  <style>
+    body{margin:0;font-family:Arial;background:#0b1220;color:#fff}
+    header{padding:16px;background:#111b33;font-weight:700;text-align:center}
+    .wrap{padding:16px;max-width:520px;margin:auto}
+    .card{background:#111b33;border-radius:14px;padding:14px;margin-top:12px}
+    input{width:100%;padding:12px 14px;border-radius:12px;border:0}
+    button{width:100%;padding:12px 14px;border-radius:12px;border:0;margin-top:10px;background:#2a5bff;color:#fff;font-weight:700}
+    .secondary{background:#2b3248}
+    .note{opacity:.85;font-size:13px;line-height:1.4;margin-top:10px}
+  </style>
+</head>
+<body>
+<header>📡 CAMERA REMOTE (MENU)</header>
+<div class="wrap">
+  <div class="card">
+    <b>PIN Room</b>
+    <input id="pin" placeholder="contoh: 1234" value="1234" />
+    <button id="goCam">📷 BUKA HP KAMERA</button>
+    <button id="goRemote" class="secondary">🎮 BUKA HP REMOTE</button>
+    <div class="note">
+      ✅ Pakai 1 PIN yang sama di 2 HP <br/>
+      ✅ Link otomatis pakai <b>?pin=1234</b>
+    </div>
+  </div>
+</div>
+
+<script>
+  const pinEl = document.getElementById("pin");
+
+  function getPin(){
+    const q = new URLSearchParams(location.search).get("pin");
+    if(q) pinEl.value = q;
+    return (pinEl.value || "").trim();
+  }
+
+  document.getElementById("goCam").onclick = () => {
+    const pin = getPin();
+    if(!pin) return alert("Isi PIN dulu");
+    location.href = "kamera.html?pin=" + encodeURIComponent(pin);
+  };
+
+  document.getElementById("goRemote").onclick = () => {
+    const pin = getPin();
+    if(!pin) return alert("Isi PIN dulu");
+    location.href = "remote.html?pin=" + encodeURIComponent(pin);
+  };
+
+  // auto isi pin dari link
+  getPin();
+</script>
+</body>
+</html>

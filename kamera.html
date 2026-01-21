@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>HP Kamera (Realtime Remote)</title>
+
+  <!-- Firebase Compat -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+
+  <style>
+    body{margin:0;font-family:Arial;background:#0b1220;color:#fff}
+    header{padding:14px 16px;background:#111b33;font-weight:700}
+    .wrap{padding:14px;max-width:900px;margin:auto}
+    video{width:100%;border-radius:14px;background:#000}
+    .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+    button,input{padding:12px 14px;border:0;border-radius:12px;width:100%}
+    button{background:#2a5bff;color:#fff;font-weight:700;cursor:pointer}
+    button.secondary{background:#2b3248}
+    button.danger{background:#ff3b3b}
+    .card{background:#111b33;border-radius:14px;padding:12px;margin-top:12px}
+    .ok{color:#7CFF9C}
+    a{color:#9bd6ff}
+    .small{opacity:.85;font-size:13px;line-height:1.4}
+  </style>
+</head>
+
+<body>
+<header>📷 HP KAMERA (Realtime Remote)</header>
+
+<div class="wrap">
+  <div class="card">
+    <b>PIN Room</b>
+    <input id="pin" placeholder="contoh: 1234" value="1234"/>
+    <div class="row">
+      <button id="btnJoin">✅ JOIN ROOM</button>
+      <button id="btnLeave" class="secondary">🚪 LEAVE</button>
+    </div>
+    <div id="status" class="small" style="margin-top:10px;opacity:.9">Belum join</div>
+  </div>
+
+  <div class="card">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="canvas" style="display:none"></canvas>
+
+    <div class="row">
+      <button id="shot">📸 FOTO</button>
+      <button id="sw" class="secondary">🔁 SWITCH</button>
+    </div>
+
+    <div class="row">
+      <button id="rec" class="danger">⏺️ REKAM</button>
+      <button id="stop" class="secondary">⏹️ STOP</button>
+    </div>
+
+    <div class="row">
+      <button id="ton" class="secondary">🔦 TORCH ON</button>
+      <button id="toff" class="secondary">🔦 TORCH OFF</button>
+    </div>
+
+    <div class="small" style="margin-top:10px">
+      ✅ Rekaman akan diupload ke web (Firebase Storage) lalu linknya muncul di <b>remote.html</b>
+    </div>
+
+    <div id="uploadInfo" class="small" style="margin-top:10px;opacity:.9"></div>
+  </div>
+
+  <div class="card">
+    <b>Hasil Foto</b><br/>
+    <img id="photo" style="width:100%;border-radius:14px;margin-top:10px;display:none"/>
+    <a id="downloadPhoto" href="#" download="foto.png" style="display:none">⬇️ Download Foto</a>
+  </div>
+
+  <div class="card">
+    <b>Hasil Video</b><br/>
+    <video id="videoResult" controls style="width:100%;border-radius:14px;margin-top:10px;display:none"></video>
+    <a id="downloadVideo" href="#" download="rekaman.webm" style="display:none">⬇️ Download Video</a>
+  </div>
+</div>
+
+<script>
+/* =========================
+   ✅ FIREBASE CONFIG (PUNYA KAMU)
+========================= */
+const firebaseConfig = {
+  apiKey: "AIzaSyBfNxj8Jxz8hVMgQm2HYOYSYyw-a0750Aw",
+  authDomain: "camera-3547b.firebaseapp.com",
+  databaseURL: "https://camera-3547b-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "camera-3547b",
+  storageBucket: "camera-3547b.appspot.com",
+  messagingSenderId: "436520969909",
+  appId: "1:436520969909:web:f4ab1cef0b53bbed7940fc"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+const storage = firebase.storage();
+
+/* =========================
+   UI ELEMENTS
+========================= */
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const photo = document.getElementById("photo");
+const downloadPhoto = document.getElementById("downloadPhoto");
+
+const videoResult = document.getElementById("videoResult");
+const downloadVideo = document.getElementById("downloadVideo");
+
+const pinEl = document.getElementById("pin");
+const statusEl = document.getElementById("status");
+const uploadInfo = document.getElementById("uploadInfo");
+
+let stream = null;
+let track = null;
+let roomRef = null;
+
+let useFront = false;
+let mediaRecorder = null;
+let chunks = [];
+
+/* =========================
+   HELPERS
+========================= */
+function setStatus(html){
+  statusEl.innerHTML = html;
+}
+
+function getPinFromUrl(){
+  const p = new URLSearchParams(location.search).get("pin");
+  if(p) pinEl.value = p;
+}
+
+async function startCamera(){
+  if(stream){
+    stream.getTracks().forEach(t => t.stop());
+  }
+  stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: useFront ? "user" : "environment" },
+    audio: true
+  });
+
+  video.srcObject = stream;
+  track = stream.getVideoTracks()[0];
+}
+
+async function setTorch(on){
+  try{
+    if(!track) return alert("Kamera belum aktif");
+    const cap = track.getCapabilities();
+    if(!cap.torch) return alert("HP tidak support torch dari browser");
+    await track.applyConstraints({ advanced: [{ torch: on }] });
+  }catch(e){
+    alert("Torch gagal: " + e.message);
+  }
+}
+
+/* =========================
+   ROOM JOIN/LEAVE
+========================= */
+document.getElementById("btnJoin").onclick = async () => {
+  const pin = (pinEl.value || "").trim();
+  if(!pin) return alert("Isi PIN dulu");
+
+  roomRef = db.ref("rooms/" + pin);
+
+  // tandai online
+  await roomRef.child("camera_online").set(true);
+  roomRef.child("camera_online").onDisconnect().set(false);
+
+  setStatus(`✅ Kamera JOIN room: <span class="ok"><b>${pin}</b></span>`);
+
+  // listen command dari remote
+  roomRef.child("cmd").on("value", async (snap) => {
+    const cmd = snap.val();
+    if(!cmd) return;
+
+    if(cmd === "SHOT") takePhoto();
+    if(cmd === "SWITCH") switchCam();
+    if(cmd === "REC_START") startRecording();
+    if(cmd === "REC_STOP") stopRecording();
+    if(cmd === "TORCH_ON") setTorch(true);
+    if(cmd === "TORCH_OFF") setTorch(false);
+
+    // reset cmd biar ga kepanggil ulang
+    roomRef.child("cmd").set("");
+  });
+
+  // start camera
+  await startCamera();
+};
+
+document.getElementById("btnLeave").onclick = async () => {
+  try{
+    if(roomRef){
+      await roomRef.child("camera_online").set(false);
+      roomRef.off();
+    }
+  }catch(e){}
+  roomRef = null;
+
+  if(stream){
+    stream.getTracks().forEach(t => t.stop());
+    stream = null;
+  }
+
+  setStatus("🚪 Keluar room");
+};
+
+/* =========================
+   BUTTON LOCAL
+========================= */
+document.getElementById("shot").onclick = () => takePhoto();
+document.getElementById("sw").onclick = () => switchCam();
+document.getElementById("rec").onclick = () => startRecording();
+document.getElementById("stop").onclick = () => stopRecording();
+document.getElementById("ton").onclick = () => setTorch(true);
+document.getElementById("toff").onclick = () => setTorch(false);
+
+async function switchCam(){
+  useFront = !useFront;
+  await startCamera();
+}
+
+function takePhoto(){
+  if(!video.videoWidth) return alert("Video belum siap");
+
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(video, 0, 0);
+
+  const dataUrl = canvas.toDataURL("image/png");
+  photo.src = dataUrl;
+  photo.style.display = "block";
+
+  downloadPhoto.href = dataUrl;
+  downloadPhoto.style.display = "inline-block";
+}
+
+function startRecording(){
+  if(!stream) return alert("Kamera belum aktif");
+  if(mediaRecorder && mediaRecorder.state === "recording") return;
+
+  chunks = [];
+  mediaRecorder = new MediaRecorder(stream, { mimeType: "video/webm" });
+
+  mediaRecorder.ondataavailable = (e) => {
+    if(e.data && e.data.size > 0) chunks.push(e.data);
+  };
+
+  mediaRecorder.onstop = async () => {
+    const blob = new Blob(chunks, { type: "video/webm" });
+    const url = URL.createObjectURL(blob);
+
+    videoResult.src = url;
+    videoResult.style.display = "block";
+
+    downloadVideo.href = url;
+    downloadVideo.style.display = "inline-block";
+
+    // UPLOAD KE WEB (FIREBASE STORAGE)
+    if(!roomRef){
+      uploadInfo.innerHTML = "⚠️ Tidak upload karena belum JOIN room.";
+      return;
+    }
+
+    try{
+      uploadInfo.innerHTML = "⏳ Upload rekaman ke web...";
+      const pin = (pinEl.value || "").trim();
+      const name = `rekaman_${Date.now()}.webm`;
+
+      const fileRef = storage.ref().child(`rooms/${pin}/${name}`);
+      await fileRef.put(blob);
+
+      const onlineUrl = await fileRef.getDownloadURL();
+
+      // simpan ke database supaya muncul di remote.html
+      await roomRef.child("last_video_url").set(onlineUrl);
+
+      uploadInfo.innerHTML = `✅ Rekaman diupload! <a href="${onlineUrl}" target="_blank">Buka Rekaman Online</a>`;
+    }catch(err){
+      uploadInfo.innerHTML = "❌ Upload gagal: " + err.message;
+    }
+  };
+
+  mediaRecorder.start();
+  uploadInfo.innerHTML = "⏺️ Sedang merekam...";
+}
+
+function stopRecording(){
+  if(mediaRecorder && mediaRecorder.state === "recording"){
+    mediaRecorder.stop();
+  }
+}
+
+/* =========================
+   ✅ AUTO JOIN DARI LINK
+========================= */
+getPinFromUrl();
+window.addEventListener("load", () => {
+  setTimeout(() => {
+    document.getElementById("btnJoin").click();
+  }, 500);
+});
+</script>
+</body>
+</html>
